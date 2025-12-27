@@ -18,33 +18,12 @@ defined('ABSPATH') or die;
 // Just call do_action( 'coder_theme' , get_template_directory() ) and you are done :D
 add_action( 'coder_theme', function( $theme_path ){
     if(!is_admin()){
-        \CODERS\Themes\CoderThemes::run($theme_path);
+        \CODERS\Themes\Theme::create($theme_path)->render();
     }
 });
 
-/**
- * 
- */
-abstract class CoderThemes{
-    /**
-     * @param string $uri
-     * @return \CoderThemes
-     */
-    public static function instance( $uri = '' ){
-        return is_null( self::$_instance ) && strlen($uri) ? self::create($uri) : self::$_instance;
-    }
-    /**
-     * @param string $path
-     * @return bool
-     */
-    public static function run( $path = '' ) {
-        
-        if(strlen($path) && file_exists($path)){
-            Theme::create($path)->render();
-        }
-        return false;
-    }
-}
+
+
 
 
 /**
@@ -69,7 +48,14 @@ class Element{
      * @return string
      */
     public function __toString() {
-        return sprintf('%s#%s',$this->type(),$this->name());
+        $element = array($this->type());
+        if( $this->name() ){
+            $element[] .= '#'.$this->name();
+        }
+        if( $this->class()){
+            $element[] .= '.' . $this->class();
+        }
+        return implode('', $element);
     }
 
     /**
@@ -148,17 +134,17 @@ class Element{
     protected function open( $class = '' ) {
         $class .= ' ' . $this->class();
         printf('<%s class="%s">', $this->type(),$class);
-        if($this->hasWrapper()){
+        /*if($this->hasWrapper()){
             printf('<div class="%s">',$this->wrap());
-        }
+        }*/
     }
     /**
      * 
      */
     protected function close() {
-        if( $this->hasWrapper()){
+        /*if( $this->hasWrapper()){
             print '</div>';
-        }
+        }*/
         printf('</%s><!-- %s -->',$this->type(),$this->type());
     }
     /**
@@ -185,7 +171,7 @@ class Content extends Element{
     /**
      * @var \CODERS\Themes\Element[]
      */
-    private $_contents = array();
+    private $_components = array();
     /**
      * 
      * @var string
@@ -205,7 +191,7 @@ class Content extends Element{
      * @return bool
      */
     public function has($content = '' ){
-        return strlen($content) && array_key_exists($content, $this->contents());
+        return strlen($content) && array_key_exists($content, $this->components());
     }
     /**
      * @param Element $content
@@ -213,7 +199,7 @@ class Content extends Element{
      */
     protected function add(Element $content = null ){
         if(!is_null($content) && !$this->has($content->name())){
-            $this->_contents[$content->name()] = $content;
+            $this->_components[$content->name()] = $content;
         }
         return $this;
     }
@@ -221,14 +207,14 @@ class Content extends Element{
     /**
      * @return \CODERS\Themes\Element[]
      */
-    public function contents(){
-        return $this->_contents;
+    public function components(){
+        return $this->_components;
     }
     /**
      * 
      */
     protected function content() {
-        foreach( $this->contents() as $content ){
+        foreach( $this->components() as $content ){
             $content->render();
         }
     }
@@ -241,8 +227,27 @@ class Content extends Element{
     /**
      * @return bool
      */
-    protected function hasWrapper() {
+    public function hasWrapper() {
         return strlen($this->_wrap) > 0;
+    }
+    
+    /**
+     * @param string $class
+     */
+    protected function open($class = '') {
+        parent::open( $class );
+        if($this->hasWrapper()){
+            printf('<div class="%s">',$this->wrap());
+        }        
+    }
+    /**
+     * 
+     */
+    protected function close() {
+        if( $this->hasWrapper()){
+            print '</div>';
+        }
+        parent::close();
     }
 }
 /**
@@ -313,15 +318,19 @@ class Sidebar extends Element{
         $this->_title = strlen($title) ? $title : $name;
     }
     /**
-     * @param string $h
+     * @param string $ht
+     * @return \CODERS\Themes\Sidebar
      */
-    public function register($h = 'h2'){
+    public function register( $ht = 'h2'){
         register_sidebar(array(
+            'name' => $this->name(),
+            'id' => $this->id(),
             'before_widget'=>sprintf('<div class="widget"><!-- sidebar [%s] -->',$this->name()),
             'after_widget'=>sprintf('<!-- sidebar [%s] --></div>',$this->name()),
             'before_title'=>sprintf('<%s class="widget-title">',$ht),
             'after_title'=>sprintf('</%s>',$ht),
         ));
+        return $this;
     }
     
     
@@ -410,33 +419,41 @@ class Post extends Element{
     }
 }
 
+
+
+
 /**
  * Move all theme setups here
  */
 class Theme extends Content{
     /**
-     * @var string
+     * @var string[]
      */
-    private $_path = '';
-    private $_outline = array();
+    private $_route = array();
+    private $_layout = array();
     private $_sidebars = array();
     private $_menus = array();
+    private $_support = array();
     
     /**
      * @param string $path
      */
     protected function __construct($path = '') {
-        $this->_path = $path;
         
-        parent::__construct('div', 'theme');
+        $this->_route = explode('/', $path );
         
+        parent::__construct('theme');
+    }
+    /**
+     * @return \CODERS\Themes\Theme
+     */
+    private function preload() {
         foreach($this->template() as $template){
             if($this->load($template)){
                 break;
             }
         }
-        
-        $this->setup();
+        return $this;
     }
     /**
      * @return array
@@ -448,45 +465,44 @@ class Theme extends Content{
         );
     }
     /**
-     * @return type
+     * @return String[]
+     */
+    protected function route() {
+        return $this->_route;
+    }
+    /**
+     * @return string
      */
     protected function path(){
-        return $this->_path;
+        return implode('/', $this->route());
+    }
+    /**
+     * @return string
+     */
+    protected function url(){
+        return get_template_directory_uri();
+    }
+    /**
+     * @return string
+     */
+    protected function theme() {
+        return $this->route()[count($this->route())-1];
     }
     /**
      * @return type
      */
-    protected function outline(){
-        return $this->_outline;
+    protected function layout(){
+        return $this->_layout;
     }
     /**
      * @param string $uri
      * @return CoderThemes
      */
     public static final function create( $uri = '' ){
-        return new Theme($uri);
-            $root = explode('/', $uri );
-            $name = $root[count($root)-1];
-            $path = sprintf('%s/%s.theme.php',$uri,$name);
-            $theme = sprintf('\CODERS\Themes\%sTheme', ucfirst( $name) );
-            if(file_exists($path)){
-                require_once $path;
-                if(class_exists($theme) && is_subclass_of($theme, \CODERS\Themes\Theme::class,true)){
-                    return new $theme($uri);
-                }
-                else{
-                    printf('<p>Invalid Theme Instance %s</p>',$theme);
-                }
-            }
-            else{
-                printf('<p>Invalid Theme Path %s</p>',$path);
-            }
-
-            return null;
+        $theme = new Theme($uri);
+        
+        return $theme->preload()->setup();
     }
-    
-    
-    
     /**
      * @return \CODERS\Themes\Sidebar[]
      */
@@ -503,112 +519,48 @@ class Theme extends Content{
      * @return array
      */
     public function extensions() {
-        return array();
+        return $this->_support;
     }
     
-    /**
-     * @return array
-     */
-    public function scripts() {
-        return array();
-    }
-    
-    /**
-     * @return array
-     */
-    public function styles() {
-        return array();
-    }
-    
-    
-    /**
-     * @return array
-     */
-    public function settings() {
-        return array();
-    }
     /**
      * @return array
      */
     public function customizers() {
         return array();
     }
-    
-    /**
-     * @param string $name
-     * @param string $title
-     * @return \CODERS\Themes\Theme
-     */
-    public function sidebar($name = '',$title = '') {
-        if(!array_key_exists($name, $this->sidebars())){
-            $sidebar = new Sidebar($name,$title);
-            $this->_sidebars[$sidebar->name()] = $sidebar;
-        }
-        return $this;
-    }
-    /**
-     * @param string $name
-     * @param string $loc
-     * @param string $title
-     * @return \CODERS\Themes\Theme
-     */
-    public function menu($name = '',$loc = '', $title = '') {
-        if(!array_key_exists($name, $this->menus())){
-            $menu = new Menu($name,$loc,$title);
-            $this->_menus[$menu->name()] = $menu;
-        }
-        return $this;
-    }
     /**
      * @return \CODERS\Themes\Theme
      */
     protected function themesupport() {
         foreach($this->extensions() as $ext => $settings){
-            add_theme_support($ext,$settings);
+            if(is_array($settings)){
+                add_theme_support($ext,$settings);
+            }
         }
         return $this;
     }
     /**
-     * @return \CODERS\Themes\Theme
-     */
-    protected function registermenus(){
-        $locations = array_map( function($menu){
-            return $menu->maplocation();
-        },$this->menus());
-        register_nav_menus($locations);
-        return $this;
-    }
-    /**
-     * @return \CODERS\Themes\Theme
-     */
-    protected function registerSidebars(){
-        foreach($this->sidebars() as $sb){
-            $sb->register();
-        }
-        return $this;
-    }
-    /**
-     * @param array $outline
+     * @param mixed $outline
      * @return \CODERS\Themes\Element[]
      */
     protected function read( array $outline = array() ) {
         $tree = array();
         foreach($outline as $name => $content ){
-            $tree[$name] = is_numeric($name) ?
-                    $this->read( $content ) :
-                    $this->parse( $name , $content);
+            $tree[$name] = $this->parse( $name , $content);
         }
         return $tree;
     }
     /**
      * @param string $name
-     * @param array $content
+     * @param mixed $content
      * @return \CODERS\Themes\Element
      */
-    protected function parse( $name , $content ){
+    protected function parse( $name , $content = '' ){
         switch(true){
+            case is_numeric($name):
+                return $this->parse($content);
             case $name === 'site-logo':
-                return $content;
+                return new Logo();
             case preg_match('/-menu$/', $name):
                 $menu = substr($name,strlen($name)-5);
                 return new Menu( $menu, $content['location'] ?? '', $content['title'] ?? '' );
@@ -616,9 +568,86 @@ class Theme extends Content{
                 $sidebar = substr($name,strlen($name)-8);
                 return new Sidebar( $sidebar, $content );
             case is_array($content):
-                return $this->read($content);
+                $container = new Content($name);
+                foreach ($content as $key => $data ){
+                    $container->add($this->parse($key,$data));
+                }
+                return $container;
         }
         return new Element($name);
+    }
+    /**
+     * @param array $support
+     * @return \CODERRS\Themes\Theme
+     */
+    private function loadExtensions( $support = array()) {
+        foreach($support as $type => $content){
+            $this->_support[$type] = $content;
+        }
+        return $this->themesupport();
+    }
+    /**
+     * @param array $menus
+     * @return \CODERRS\Themes\Theme
+     */
+    private function loadMenus( $menus = array()) {
+        foreach($menus as $location => $name ){
+            $menu = new Menu($name, $location);
+            $this->_menus[ $name ] = $menu;
+        }
+        $map = array();
+        foreach($this->menus() as $menu ){
+            $map[$menu->location()] = $menu->name();
+        }
+        register_nav_menus($map);
+        return $this;
+    }
+    /**
+     * @param array $sidebars
+     * @return \CODERRS\Themes\Theme
+     */
+    private function loadSidebars( $sidebars = array()) {
+        foreach($sidebars as $name => $title ){
+            $sb = new Sidebar($name,$title);
+            $this->_sidebars[ $name ] = $sb->register();
+        }
+        return $this;
+    }
+    /**
+     * @param array $script
+     * @return \CODERS\Themes\Theme
+     */
+    private function loadScripts($script = array()) {
+        $list = array();
+        foreach ($script as $name) {
+            $list[$name] = sprintf('%s/%s.js', $this->url(), $name);
+        }
+        if( count($list)){
+            add_action( 'wp_enqueue_scripts' , function() use($list){
+                foreach($list as $handle => $url ){
+                    wp_enqueue_script( $handle, $url,array(),false,true);
+                }
+            });
+        }
+        return $this;
+    }
+    /**
+     * @param array $styles
+     * @return \CODERS\Themes\Theme
+     */
+    private function loadStyles( $styles = array()) {
+        $list = array();
+        foreach ($styles as $name) {
+            $list[$name] = sprintf('%s/%s.css', $this->url(), $name);
+        }
+       if( count($list)){
+            add_action( 'wp_enqueue_scripts' , function() use($styles){
+                foreach($styles as $handle => $url ){
+                    wp_enqueue_style( $handle, $url,array(),false,true);
+                }
+            });
+        }
+        return $this;
     }
 
 
@@ -630,7 +659,7 @@ class Theme extends Content{
         if(file_exists($path)){
             $content = file_get_contents($path);
             if(strlen($content)){
-                $this->_outline = json_decode($content, true);
+                $this->_layout = json_decode($content, true);
                 return true;
             }
         }
@@ -641,14 +670,21 @@ class Theme extends Content{
      * @return \CODERS\Themes\Theme
      */
     public function setup(){
-        
-        var_dump($this->outline());
-        
-        $this->themesupport()
-                ->registerSidebars()
-                ->registermenus();
-        
-        var_dump($this);
+        //return $this;
+        $setup = $this->layout();
+        //support
+        $this->loadExtensions($setup['support'] ?? array());
+        //style and scripts
+        $this->loadScripts($setup['script'] ?? array());
+        $this->loadStyles($setup['style'] ?? array());
+        $this->loadMenus($setup['menu'] ?? array());
+        $this->loadSidebars($setup['sidebar'] ?? array());
+        //layout
+        $contents = $this->parse($this->theme(),$setup['layout'] ?? array());
+        foreach($contents->components() as $c ){
+            $this->add($c);
+        }
+        var_dump($this->components());
         return $this;
     }
     
@@ -656,7 +692,7 @@ class Theme extends Content{
     /**
      * @return string Título
      */
-    protected function showTitle(){
+    protected function title(){
 
         return is_front_page( /*inicio*/ ) || is_home( /*inicio o pagina de entradas*/) ?
                 get_bloginfo( 'name' ) :    //solo titulo web
@@ -666,12 +702,18 @@ class Theme extends Content{
      * @return \CODERS\Theme
      */
     protected function open( $class = ''){
+        
+        $classname = get_body_class();
+        $classname[] = 'coder-themes ' . $this->theme();
+        if($class ){
+            $classname[] = $class;
+        }
+        
         printf('<!DOCTYPE html><html %s>', get_language_attributes());
-        print('<head>');
-        printf('<title>%s</title>',$this->showTitle());
+        printf('<head><title>%s</title>',$this->title());
         wp_head();
         print('</head>');
-        printf('<body class="%s" >', implode(' ',  get_body_class( ) ) );
+        //printf('<body class="%s" >', implode(' ',  $classname ) );
         return $this;
     }
     /**
@@ -679,13 +721,25 @@ class Theme extends Content{
      */
     protected function close(){
         wp_footer();
-        print '</html>';
+        //print '</html>';
+        return $this;
+    }
+    /**
+     * @param string $class
+     * @return \CODERS\Themes\Theme
+     */
+    public function render($class = '') {
+        //parent::render($class);
+        $this->open($class);
+        var_dump($this->components());
+        $this->content();
+        //print($this);
+        //var_dump($this);
+        
+        $this->close();
         return $this;
     }
 }
-
-
-
 
 
 

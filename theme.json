@@ -2,7 +2,13 @@
     "name": "default",
     "support":{
         "post-thumbnails":[],
-        "custom-logo": ""
+        "custom-logo": {
+            "width": 200,
+            "height": 100,
+            "flex-height": true,
+            "flex-width": true,
+            "header-text": ["site-title","site-description"]
+        }
     },
     "style":["style"],
     "script":["script"],
