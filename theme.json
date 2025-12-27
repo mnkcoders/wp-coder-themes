@@ -13,18 +13,18 @@
     "style":["style"],
     "script":["script"],
     "menu": {
-        "main":"main-menu",
-        "top":"top-menu",
-        "legal":"bottom-menu"
+        "main-menu":"main",
+        "top-menu":"top",
+        "bottom-menu":"legal"
     },
     "sidebar": {
-        "top":"Top Bar",
-        "error":"Error Bar",
-        "bottom ":"Bottom Bar",
-        "footer-1":"Footer A",
-        "footer-2":"Footer B",
-        "footer-3":"Footer C",
-        "footer-4":"Footer D"
+        "top":{"title":"Top Bar","desc":"Header top bar"},
+        "error":{"title":"Error Bar","desc":"Show this sidebar in error pages"},
+        "bottom ":{"title":"Bottom Bar","desc":"Bottom page legacy and identity contents"},
+        "footer-1":{"title":"Footer A"},
+        "footer-2":{"title":"Footer B"},
+        "footer-3":{"title":"Footer C"},
+        "footer-4":{"title":"Footer D"}
     },
     "layout": {
         "header":{
