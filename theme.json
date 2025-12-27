@@ -1,6 +1,9 @@
 {
     "name": "default",
-    "support":{
+    "settings":{
+        "ids":["header","content","footer"],
+        "style":["style"],
+        "script":["script"],
         "post-thumbnails":[],
         "custom-logo": {
             "width": 200,
@@ -10,38 +13,41 @@
             "header-text": ["site-title","site-description"]
         }
     },
-    "style":["style"],
-    "script":["script"],
     "menu": {
-        "main-menu":"main",
-        "top-menu":"top",
-        "bottom-menu":"legal"
+        "main": "Main Menu",
+        "top": "Top Menu",
+        "bottom":"Bottom Menu"
     },
     "sidebar": {
         "top":{"title":"Top Bar","desc":"Header top bar"},
-        "error":{"title":"Error Bar","desc":"Show this sidebar in error pages"},
-        "bottom ":{"title":"Bottom Bar","desc":"Bottom page legacy and identity contents"},
-        "footer-1":{"title":"Footer A"},
-        "footer-2":{"title":"Footer B"},
-        "footer-3":{"title":"Footer C"},
-        "footer-4":{"title":"Footer D"}
+        "error":{"title":"Error Bar","desc":"Show this sidebar in error pages to provide nav support"},
+        "bottom":{"title":"Bottom Bar","desc":"Bottom page legacy and identity contents"},
+        "footera":{"title":"Footer A"},
+        "footerb":{"title":"Footer B"},
+        "footerc":{"title":"Footer C"},
+        "footerd":{"title":"Footer D"}
     },
     "layout": {
         "header":{
             "top-bar":{
-                "left":"top-sidebar",
-                "right":"top-menu"
+                "left": "top-sidebar",
+                "right": "top-menu"
             },
             "main":{
-                "logo":"logo",
-                "main-menu":"menu"
+                "logo": "site-logo",
+                "menu": "main-menu"
             }
         },
         "content":"content",
         "footer":{
-            "footer-widgets":"footer-sidebar",
+            "footer-widgets":[
+                "footera-sidebar",
+                "footerb-sidebar",
+                "footerc-sidebar",
+                "footerd-sidebar"
+            ],
             "bottom-bar":{
-                "left":"bottom-sidebar",
+                "left": "bottom-sidebar",
                 "right":"bottom-menu"
             }
         }
