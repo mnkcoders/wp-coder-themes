@@ -22,8 +22,7 @@ add_action( 'coder_theme', function( ){
     }
 });
 add_action( 'init', function( ){
-    $theme = get_template_directory();
-    \CODERS\Themes\Theme::create($theme);
+    \CODERS\Themes\Theme::create(get_template_directory());
 });
 
 
@@ -31,17 +30,23 @@ add_action( 'init', function( ){
  * Create extended content blocks to render each content
  */
 class Element{
-    
-    private $_name =  '';
-    private $_class = '';
+    /**
+     * @var array
+     */
+    private $_att = array(
+        'type' => 'div',
+        'name' => '',
+        'class' => '',
+        'id' => '',
+    );
     
     /**
      * @param string $name
      * @param string $class
      */
     public function __construct($name = '' , $class = '' ) {
-        $this->_name = $name;
-        $this->_class = $class;
+        $this->set('name', $name );
+        $this->set('class',$class);
     }
     
     /**
@@ -63,7 +68,35 @@ class Element{
      * @return string
      */
     public function __get( $name ){
-        return sprintf('<!-- %s -->',$name);
+        return $this->_att[$name] ?? '';
+        //return sprintf('<!-- %s -->',$name);
+    }
+    /**
+     * @param string $name
+     * @param string $value
+     */
+    public function __set($name , $value ) {
+        if($this->has($name)){
+            $this->_att[$name] = $value;
+        }
+    }
+    /**
+     * @param string $name
+     * @return boolean
+     */
+    protected function has($name) {
+        return array_key_exists($name, $this->_att );
+    }
+    /**
+     * @param string $name
+     * @param string $value
+     * @return \CODERS\Themes\Element
+     */
+    protected function set($name,$value = '') {
+        if( $name ){
+            $this->_att[$name] = $value;
+        }
+        return $this;
     }
     
     /**
@@ -99,25 +132,25 @@ class Element{
      * @return string
      */
     public function name() {
-        return $this->_name;
+        return $this->name;
     }
     /**
      * @return string
      */
     public function id() {
-        return $this->name();
+        return $this->id;
     }
     /**
      * @return string
      */
     public function class() {
-        return $this->_class;
+        return $this->class;
     }
     /**
      * @return string
      */
     public function type(){
-        return 'div';
+        return $this->type;
     }
     
     /**
@@ -138,7 +171,7 @@ class Element{
         if( $class ){
             $cls[] = $class;
         }
-        $id = $this->name() ? sprintf('id="%s"',$this->name()) : '';
+        $id = $this->id() ? sprintf('id="%s"',$this->id()) : '';
         if(count($cls)){
             printf('<%s class="%s" %s><!-- %s opener -->', $this->type(), implode(' ', $cls),$id,$this);
         }
@@ -175,6 +208,357 @@ class Element{
     }
 }
 
+
+/**
+ * 
+ */
+class Customizer{
+    
+    private $_settings = array();
+    private $_sections = array();
+    private $_controls = array();
+    private $_priority = 0;
+    /**
+     * @param string $template
+     * @param int $priority
+     */
+    public function __construct( $template = '' ,$priority = 0) {
+        $this->_priority = $priority;
+    }
+    /**
+     * @return int
+     */
+    private function priority() {
+        return $this->_priority;
+    }
+    /**
+     * @param \CODERS\Themes\Control $control
+     * @return \CODERS\Themes\Customizer
+     */
+    public function addcontrol( Control $control = null ) {
+        if($control ){
+            $priority = $this->priority() + count($this->controls()) + 1;
+            $control->priority = $priority;
+            $this->_controls[$control->name()] = $control;
+        }
+        return $this;
+    }
+    /**
+     * @param \CODERS\Themes\Section $section
+     * @return \CODERS\Themes\Customizer
+     */
+    public function addsection( Section $section = null ) {
+        if($section){
+            $this->_sections[$section->name()] = $section;
+        }
+        return $this;
+    }
+    /**
+     * @param \CODERS\Themes\Setting $setting
+     * @return \CODERS\Themes\Customizer
+     */
+    public function addsetting(Setting $setting = null ) {
+        if($setting){
+            $this->_settings[$setting->name()] = $setting;
+        }
+        return $this;
+    }
+    /**
+     * @return \CODERS\Themes\Control[]
+     */
+    public function controls() {
+        return $this->_controls;
+    }
+    /**
+     * @return \CODERS\Themes\Setting[]
+     */
+    public function settings() {
+        return array();
+    }
+    /**
+     * @return \CODERS\Themes\Section[]
+     */
+    public function sections(){
+        return array();
+    }
+    
+    /**
+     * 
+     * @return \CODERS\Themes\Customizer
+     */
+    public function setup(){
+        
+        $customizer = $this;
+        
+        add_action('customize_register', function(WP_Customize_Manager $wp_customize) use($customizer){
+            
+            foreach( $customizer->settings() as $id => $settings ){
+                $wp_customize->add_setting($id, $settings);
+            }
+            
+            foreach( $customizer->sections() as $id => $section ){
+                $wp_customize->add_section($id,$section);
+            }
+            
+            foreach( $customizer->controls() as $id => $control ){
+                
+                if(array_key_exists('type', $control) && $control['type'] === 'select' ){
+                    $control['choices'] = $control->setting($id);
+                }
+                
+                $wp_customize->add_control(new WP_Customize_Control(
+                        $wp_customize,
+                        $id,
+                        $control->contents()
+                        ));
+            }
+        });
+        
+        return $this;
+    }
+}
+/**
+ * 
+ */
+class Setting{
+   
+    private $_name = 'setting';
+    private $_settings = array();
+    /**
+     * @param string $name
+     * @param array $values
+     */
+    protected function __construct($name , $values = array()) {
+        $this->_name = $name;
+        $this->_settings = $values;
+    }
+    /**
+     * @param string $name
+     * @param array $values
+     * @return \CODERS\Themes\Setting
+     */
+    public static function read( array $setting = array() ) {
+        $name = $setting['setting'] ?? '';
+        return $name ? new Setting($name,$setting['values'] ?? array()) : null;
+    }
+    /**
+     * @return string
+     */
+    public function name() {
+        return $this->_name;
+    }
+    /**
+     * @return array
+     */
+    public function valules() {
+        return $this->_settings;
+    }
+    /**
+     * @return string[]
+     */
+    public function list() {
+        return array_keys($this->valules());
+    }
+    /**
+     * @param string $default
+     */
+    public function getmod( $default = ''){
+        return get_theme_mod($this->name(),$default);        
+    }
+}
+
+/**
+ * 
+ */
+class Section {
+    /**
+     * @var array
+     */
+    private $_section = array(
+        'id' => 'section',
+        'title' => 'Section',
+        'priority' => 0,
+    );
+    /**
+     * @var \CODERS\Themes\Control[]
+     */
+    private $_controls = array();
+    /**
+     * @param string $id
+     * @param string $title
+     * @param int $priority
+     */
+    public function __construct( $id = '' , $title = '' , $priority = 0) {
+         $this->id = $id;
+         $this->title = $title;
+         $this->priority = $priority;
+    }
+    /**
+     * @param array $section
+     * @return \CODERS\Themes\Control
+     */
+    public static function read( array $section = array() ) {
+        return new Section(
+                $section['id'] ?? 'section',
+                $section['title'] ?? 'Section',
+                $section['priority'] ?? 0
+        );
+    }
+    /**
+     * @return string
+     */
+    public function name() {
+        return $this->id;
+    }
+    /**
+     * @param string $name
+     * @return string
+     */
+    public function __get($name) {
+        return $this->_section[$name] ?? '';
+    }
+    /**
+     * @param string $name
+     * @param string $value
+     */
+    public function __set($name,$value) {
+        if( $this->has($name)){
+            $this->_section[$name] = $value;
+        }
+    }
+    /**
+     * @param string $name
+     * @return boolean
+     */
+    public function has($name) {
+        return array_key_exists($name, $this->_section);
+    }
+    /**
+     * @param \CODERS\Themes\Control $control
+     * @return \CODERS\Themes\Section
+     */
+    public function add( $control = null ) {
+        if( $control && get_class($control) === Control::class ){
+            $this->_controls[$control->name()] = $control; 
+        }
+        return $this;
+    }
+    /**
+     * @return array
+     */
+    public function section() {
+        return $this->_section;
+    }
+}
+/**
+ * 
+ */
+class Control{
+    const SELECT = 'select';
+    const TEXT = 'text';
+    const NUMBER = 'number';
+    const CHECKBOX = 'checkbox';
+
+    /**
+     * @var array
+     */
+    private $_control = array(
+        'id' => 'control',
+        'section' => '',
+        'settings' => '',
+        'label' => '',
+        'type' => '',
+        'description' => '',
+        'priority' => 0,
+    );
+    /**
+     * @var \CODERS\Themes\Setting
+     */
+    private $_setting = null;
+   
+    /**
+     * @param string $id
+     * @param string $type
+     * @param string $section
+     */
+    public function __construct($id = 'control' , $type = self::TEXT , $section = ''  ) {
+        $this->id = $id;
+        $this->label = $id;
+        $this->type = $type;
+        $this->section = $section;
+    }
+    /**
+     * @param array $content
+     * @return \CODERS\Themes\Control
+     */
+    public static function read( array $content = array() ) {
+        return new Control(
+                $content['control'] ?? 'control',
+                $content['type'] ?? self::TEXT,
+                $content['section'] ?? ''
+        );
+    }
+    /**
+     * @return string
+     */
+    public function name() {
+        return $this->id;
+    }
+    /**
+     * @param string $name
+     * @param string $value
+     */
+    public function __set($name,$value) {
+        if( $this->has($name)){
+            $this->_control[$name] = $value;
+        }
+    }
+    /**
+     * @param string $name
+     * @return string
+     */
+    public function __get($name) {
+        return $this->_control[$name] ?? '';
+    }
+    /**
+     * @param string $name
+     * @return boolean
+     */
+    public function has($name) {
+        return array_key_exists($name, $this->_control);
+    }
+    /**
+     * @return \CODERS\Themes\Setting
+     */
+    public function setting() {
+        return $this->_setting;
+    }
+    /**
+     * @param int $priority
+     * @return array
+     */
+    public function contents( ) {
+        $control = $this->_control;
+        $setting = $this->setting() ? $this->setting()->name() : '';
+        $choices = $this->setting() ? $this->setting()->valules() : array();
+        $control['settings'] = $setting;
+        if(count($choices) ){
+            $control['choices'] = $choices;
+        }
+        
+        return $control;
+    }
+    /**
+     * @param \CODERS\Themes\Setting $setting
+     * @return \CODERS\Themes\Control
+     */
+    public function fromsetting( Setting $setting  =null) {
+        $this->_setting = $setting ? $setting : null;
+        return $this;
+    }
+    
+}
+
 /**
  * 
  */
@@ -196,7 +580,7 @@ class Content extends Element{
      */
     public function __construct($name = '', $class = '', $wrap = '') {
         parent::__construct($name, $class );
-        $this->_wrap = $wrap;
+        $this->set('wrap',$wrap);
     }
     /**
      * @param string $content
@@ -320,34 +704,26 @@ class Menu extends Element{
  */
 class Sidebar extends Element{
     /**
-     * @var string
-     */
-    private $_title = '';
-    /**
-     * @var string
-     */
-    private $_desc = '';
-    /**
      * @param string $name
      * @param string $title
      * @param string $desc
      */
     public function __construct($name = '',$title = '', $desc = '') {
         parent::__construct($name, 'sidebar');
-        $this->_title = strlen($title) ? $title : $name;
-        $this->_desc = $desc;
+        $this->set('title',strlen($title) ? $title : $name)
+            ->set('description',$desc);
     }
     /**
      * @return string
      */
     protected function title() {
-        return $this->_title;
+        return $this->title;
     }
     /**
      * @return string
      */
     protected function desc() {
-        return $this->_desc;
+        return $this->description;
     }
     /**
      * @param string $ht
@@ -477,8 +853,15 @@ class Theme extends Content{
     private $_sidebars = array();
     private $_menus = array();
     private $_settings = array();
-    private $_block = ['container'];
     private $_ids = array();
+    /**
+     * @var string[]
+     */
+    private $_block = ['container'];
+    /**
+     * @var \CODERS\Themes\Customizer
+     */
+    private $_customizer = null;
     
     /**
      * @param string $path
@@ -486,12 +869,22 @@ class Theme extends Content{
      * @param string $wrap
      */
     protected function __construct($path = '',$class = '' , $wrap = 'wrap' ) {
-        
         $this->_route = explode('/', $path );
-        
         parent::__construct('theme',$class,$wrap);
-        
         $this->setup();
+    }
+    /**
+     * @return String[]
+     */
+    protected function  ids(){
+        return $this->_ids;
+    }
+    /**
+     * @param string $name
+     * @return boolean
+     */
+    protected function isid($name = '') {
+        return $name ? in_array($name, $this->ids()) : false;
     }
     /**
      * @return string
@@ -538,26 +931,58 @@ class Theme extends Content{
         return $this->route()[count($this->route())-1];
     }
     /**
+     * @param string $path
+     * @return string
+     */
+    private static function themepath( $path = ''){
+        return sprintf('%s/theme.json',$path);
+    }
+    /**
+     * @return string
+     */
+    private function templatepath() {
+        return self::themepath($this->path());
+    }
+    /**
+     * @return boolean
+     */
+    private function ready() {
+        return file_exists($this->templatepath());
+    }
+    /**
      * @return type
      */
     protected function layout(){
         return $this->_layout;
     }
     /**
+     * @return \CODERS\Themes\Theme
+     */
+    public static function theme() {
+        return self::$_theme;
+    }
+    /**
      * @param string $uri
      * @return \CODERS\Themes\Theme
      */
     public static final function create( $uri = '' ){
-        self::$_theme = new Theme( preg_replace('/\\\\/', '/', $uri));
-        return self::$_theme;
+        $path = preg_replace('/\\\\/', '/', $uri);
+        $themeurl = self::themepath($path);
+        if(file_exists($themeurl)){
+            self::$_theme = new Theme( $path );
+        }
+        return self::theme();
     }
     /**
      * @param string $class
      * @return \CODERS\Themes\Theme
      */
     public static function show($class = '') {
-        if( self::$_theme){
+        if( self::$_theme ){
             self::$_theme->render( $class );
+        }
+        else{
+            printf('No theme template here :(');
         }
     }
     /**
@@ -567,28 +992,10 @@ class Theme extends Content{
         return $this->_sidebars;
     }
     /**
-     * @param string $name
-     * @return \CODERS\Themes\Sidebar
-     */
-    protected function sidebar($name) {
-        $sb =  $this->sidebars()[$name] ?? null;
-        //var_dump(sprintf('%s [%s]',$name,$sb));
-        return $sb;
-    }
-    /**
      * @return \CODERS\Themes\Menu[]
      */
     public function menus() {
         return $this->_menus;
-    }
-    /**
-     * @param string $name
-     * @return \CODERS\Themes\Menu
-     */
-    protected function menu($name) {
-        $menu = $this->menus()[$name] ?? null;
-        //var_dump(sprintf('%s [%s]',$name,$menu));
-        return $menu;
     }
     /**
      * @return array
@@ -611,57 +1018,37 @@ class Theme extends Content{
     protected function parse( $name , $content = '' ){
         $css = $this->cssblock(true);
         $wrap = $this->wrap();
+        $block = new Content($name,$css);
+        if( $this->isid($name)){
+            $block->id = $name;
+        }
         switch(true){
             case is_array($content):
-                $block = new Content($name,$css);
-                foreach ($content as $key => $data ){
+                foreach ($content as $key => $data) {
                     $block->add($this->parse(
-                            is_numeric($key) ? '' : $key,
-                            $data,
-                            $wrap ) );
+                                    is_numeric($key) ? '' : $key,
+                                    $data,
+                                    $wrap));
                 }
-                return $block;
+                break;
             case $content === 'content':
             case $content === 'blog':
-                return new Post($name);
+                $block->add(new Post($name));
+                break;
             case $content === 'site-logo':
-                return $this->attachLogo($name, $content);
+                $block->add(new Logo($name));
+                break;
             case preg_match('/-menu$/', $content):
-                return $this->attachMenu($name, $content);
+                $menu = substr($content, 0 , strlen($content)-5);
+                $block->add( $this->menus()[$menu] ?? new Element($content,'empty') );
+                break;
             case preg_match('/-sidebar$/', $content):
-                return $this->attachSidebar($name, $content);
+                $sb = substr($content, 0 , strlen($content)-8);
+                $block->add( $this->sidebars()[$sb] ?? new Element($content,'empty'));
+                break;
         }
-        return new Element($name , $css);
-    }
-    /**
-     * @param string $wrapper
-     * @param string $name
-     * @return \CODERS\Themes\Content
-     */
-    protected function attachMenu($wrapper,$name) {
-        $block = new Content('',$wrapper);
-        $block->add($this->menu(substr($name, 0 , strlen($name)-5)) ?? Element::empty($name));
         return $block;
-    }
-    /**
-     * @param string $wrapper
-     * @param string $name
-     * @return \CODERS\Themes\Content
-     */
-    protected function attachSidebar($wrapper,$name) {
-        $block = new Content('',$wrapper);
-        $block->add($this->sidebar(substr($name, 0 , strlen($name)-8)) ?? Element::empty($name));
-        return $block;
-    }
-    /**
-     * @param string $wrapper
-     * @param string $name
-     * @return \CODERS\Themes\Content
-     */
-    protected function attachLogo($wrapper,$name) {
-        $block = new Content('',$wrapper);
-        $block->add(new Logo($name));
-        return $block;
+        //return new Element($name , $css  );
     }
     /**
      * @param array $support
@@ -763,16 +1150,15 @@ class Theme extends Content{
      * @return array
      */
     private function load( ) {
-        $template = $this->templates();
-        if(strlen($template ) ){
-            $content = file_get_contents($template );
+        //$template = $this->templates();
+        if( $this->ready()){
+            $content = file_get_contents($this->templatepath());
             if(strlen($content)){
                 return json_decode($content, true);
             }
         }
         return array();
     }
-    
     /**
      * @return \CODERS\Themes\Theme
      */
@@ -785,7 +1171,39 @@ class Theme extends Content{
         $this->readSidebars($template['sidebar'] ?? array());
         //layout
         $this->_layout = $template['layout'] ?? array();
+        
+        if(is_admin() ){
+            $this->createcustomizer( $template['customizer']  ?? array() );
+        }
+        
         return $this;
+    }
+    /**
+     * @param array $content
+     */
+    private function createcustomizer( array $content = array()) {
+        if( count($content)){
+            $customizer = new Customizer($this->templatepath());
+            $settings = $content['settings'] ?? array();
+            $sections = $content['sections'] ?? array();
+            $controls = $content['controls'] ?? array();
+            foreach($settings as $setting  ){
+                $customizer->addsetting( Setting::read($setting));
+            }
+            foreach($sections as $section){
+                $customizer->addsection(Section::read($section));
+            }
+            foreach($controls as $control ){
+                $customizer->addcontrol( Control::read($control ) );
+            }
+            $this->_customizer = $customizer->setup();
+        }
+    }
+    /**
+     * @return \CODERS\Themes\Customizer
+     */
+    public function customizer() {
+        return $this->_customizer;
     }
     
     
@@ -846,6 +1264,5 @@ class Theme extends Content{
         return $this;
     }
 }
-
 
 

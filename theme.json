@@ -13,6 +13,17 @@
             "header-text": ["site-title","site-description"]
         }
     },
+    "customizer":{
+        "settings": [
+            {"setting":"color","values":{"red":"Red","blue":"Blue"}}
+        ],
+        "sections":[
+            {"section":""}
+        ],
+        "controls":[
+            {"control":""}
+        ]
+    },
     "menu": {
         "main": "Main Menu",
         "top": "Top Menu",

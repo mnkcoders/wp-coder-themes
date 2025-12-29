@@ -1,4 +1,6 @@
-<?php defined('ABSPATH') or die;
+<?php namespace CODERS\Backup\Themes;
+
+defined('ABSPATH') or die;
 
 /**
  * 
