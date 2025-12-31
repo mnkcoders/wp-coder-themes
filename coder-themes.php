@@ -216,14 +216,20 @@ class Customizer{
     
     private $_settings = array();
     private $_sections = array();
-    private $_controls = array();
     private $_priority = 0;
     /**
      * @param string $template
      * @param int $priority
      */
-    public function __construct( $template = '' ,$priority = 0) {
+    public function __construct( $priority = 0) {
         $this->_priority = $priority;
+    }
+    /**
+     * @param string $name
+     * @return string
+     */
+    public function __get($name) {
+        return $this->get($name);
     }
     /**
      * @return int
@@ -232,16 +238,12 @@ class Customizer{
         return $this->_priority;
     }
     /**
-     * @param \CODERS\Themes\Control $control
-     * @return \CODERS\Themes\Customizer
+     * @param string $name
+     * @param mixed $default
+     * @return mixed
      */
-    public function addcontrol( Control $control = null ) {
-        if($control ){
-            $priority = $this->priority() + count($this->controls()) + 1;
-            $control->priority = $priority;
-            $this->_controls[$control->name()] = $control;
-        }
-        return $this;
+    public function get($name= '', $default = '') {
+        return get_theme_mod($name, $default);
     }
     /**
      * @param \CODERS\Themes\Section $section
@@ -250,8 +252,9 @@ class Customizer{
     public function addsection( Section $section = null ) {
         if($section){
             $this->_sections[$section->name()] = $section;
+            return $section;
         }
-        return $this;
+        return null;
     }
     /**
      * @param \CODERS\Themes\Setting $setting
@@ -264,22 +267,16 @@ class Customizer{
         return $this;
     }
     /**
-     * @return \CODERS\Themes\Control[]
-     */
-    public function controls() {
-        return $this->_controls;
-    }
-    /**
      * @return \CODERS\Themes\Setting[]
      */
     public function settings() {
-        return array();
+        return $this->_settings;
     }
     /**
      * @return \CODERS\Themes\Section[]
      */
     public function sections(){
-        return array();
+        return $this->_sections;
     }
     
     /**
@@ -316,21 +313,54 @@ class Customizer{
         
         return $this;
     }
+    /**
+     * @param array $content
+     * @return \CODERS\Themes\Customizer
+     */
+    public static function read( array $content = array()) {
+            $customizer = new Customizer();
+            $priority = $customizer->priority();
+            $settings = $content['settings'] ?? array();
+            $sections = $content['sections'] ?? array();
+            foreach($settings as $setting  ){
+                $customizer->addsetting( Setting::read($setting));
+            }
+            foreach($sections as $section){
+                $s = Section::read($section);
+                $controls = $section['controls'] ?? array();
+                foreach($controls as $control ){
+                    $c = Control::read($control);
+                    if( $c ){
+                        $c->fromsetting($customizer->settings()[$c->settings] ?? null);
+                        $s->add($c, $priority );
+                    }
+                }
+                $customizer->addsection( $s );
+            }
+            return $customizer->setup();
+    }
 }
 /**
  * 
  */
 class Setting{
-   
+    const SELECT = 'select';
+    const TEXT = 'text';
+    const NUMBER = 'number';
+    const CHECKBOX = 'checkbox';
+
+    private $_type = self::TEXT;
     private $_name = 'setting';
-    private $_settings = array();
+    private $_contents = array();
     /**
      * @param string $name
+     * @param string $type
      * @param array $values
      */
-    protected function __construct($name , $values = array()) {
+    protected function __construct($name , $type = self::TEXT , $values = array()) {
         $this->_name = $name;
-        $this->_settings = $values;
+        $this->_type = $type;
+        $this->_contents = $values;
     }
     /**
      * @param string $name
@@ -339,7 +369,10 @@ class Setting{
      */
     public static function read( array $setting = array() ) {
         $name = $setting['setting'] ?? '';
-        return $name ? new Setting($name,$setting['values'] ?? array()) : null;
+        return $name ? new Setting(
+                $name,
+                $setting['type'] ?? self::TEXT,
+                $setting['values'] ?? array()) : null;
     }
     /**
      * @return string
@@ -348,10 +381,16 @@ class Setting{
         return $this->_name;
     }
     /**
+     * @return string
+     */
+    public function type() {
+        return $this->_type;
+    }
+    /**
      * @return array
      */
     public function valules() {
-        return $this->_settings;
+        return $this->_contents;
     }
     /**
      * @return string[]
@@ -395,9 +434,10 @@ class Section {
     }
     /**
      * @param array $section
-     * @return \CODERS\Themes\Control
+     * @param int $priority
+     * @return \CODERS\Themes\Section
      */
-    public static function read( array $section = array() ) {
+    public static function read( array $section = array() , $priority = 0) {
         return new Section(
                 $section['id'] ?? 'section',
                 $section['title'] ?? 'Section',
@@ -435,13 +475,23 @@ class Section {
     }
     /**
      * @param \CODERS\Themes\Control $control
+     * @param int $priority
      * @return \CODERS\Themes\Section
      */
-    public function add( $control = null ) {
+    public function add( $control = null , $priority = 0) {
         if( $control && get_class($control) === Control::class ){
+            $count = $priority + count($this->controls()) + 1;
+            $control->priority = $count;
+            $control->section = $this->name();
             $this->_controls[$control->name()] = $control; 
         }
         return $this;
+    }
+    /**
+     * @return \CODERS\Themes\Control[]
+     */
+    public function controls() {
+        return $this->_controls;
     }
     /**
      * @return array
@@ -450,6 +500,7 @@ class Section {
         return $this->_section;
     }
 }
+
 /**
  * 
  */
@@ -467,7 +518,7 @@ class Control{
         'section' => '',
         'settings' => '',
         'label' => '',
-        'type' => '',
+        //'type' => '',
         'description' => '',
         'priority' => 0,
     );
@@ -477,26 +528,27 @@ class Control{
     private $_setting = null;
    
     /**
-     * @param string $id
-     * @param string $type
-     * @param string $section
+     * @param array $contents
      */
-    public function __construct($id = 'control' , $type = self::TEXT , $section = ''  ) {
-        $this->id = $id;
-        $this->label = $id;
-        $this->type = $type;
-        $this->section = $section;
+    public function __construct( $contents = array() ) {
+        $this->populate($contents);
+    }
+    /**
+     * @param array $contents
+     * @return \CODERS\Themes\Control
+     */
+    private function populate( $contents = array()) {
+        foreach($contents as $key => $val ){
+            $this->$key =$val;
+        }
+        return $this;
     }
     /**
      * @param array $content
      * @return \CODERS\Themes\Control
      */
     public static function read( array $content = array() ) {
-        return new Control(
-                $content['control'] ?? 'control',
-                $content['type'] ?? self::TEXT,
-                $content['section'] ?? ''
-        );
+        return new Control($content);
     }
     /**
      * @return string
@@ -538,15 +590,15 @@ class Control{
      * @return array
      */
     public function contents( ) {
-        $control = $this->_control;
-        $setting = $this->setting() ? $this->setting()->name() : '';
-        $choices = $this->setting() ? $this->setting()->valules() : array();
-        $control['settings'] = $setting;
-        if(count($choices) ){
-            $control['choices'] = $choices;
+        $setting = $this->setting();
+        $content = $this->_control;
+        $content['type'] = $setting ? $setting->type() : Setting::TEXT;
+        $values = $setting ? $setting->valules() : array();
+        if(count($values) ){
+            $content['choices'] = $values;
         }
         
-        return $control;
+        return $content;
     }
     /**
      * @param \CODERS\Themes\Setting $setting
@@ -556,7 +608,6 @@ class Control{
         $this->_setting = $setting ? $setting : null;
         return $this;
     }
-    
 }
 
 /**
@@ -646,6 +697,7 @@ class Content extends Element{
         parent::close();
     }
 }
+
 /**
  * 
  */
@@ -699,6 +751,7 @@ class Menu extends Element{
         }
     }
 }
+
 /**
  * 
  */
@@ -887,6 +940,13 @@ class Theme extends Content{
         return $name ? in_array($name, $this->ids()) : false;
     }
     /**
+     * @param string  $setting
+     * @param mixed $default
+     */
+    public function mod($setting = '',$default = '') {
+        return $this->customizer() ? $this->customizer()->get($setting,$default) : $default;
+    }
+    /**
      * @return string
      */
     private function templates() {
@@ -996,18 +1056,6 @@ class Theme extends Content{
      */
     public function menus() {
         return $this->_menus;
-    }
-    /**
-     * @return array
-     */
-    protected function settings() {
-        return $this->_settings;
-    }
-    /**
-     * @return array
-     */
-    public function customizers() {
-        return array();
     }
     /**
      * @todo link sidebars and menus from the registered theme components
@@ -1173,40 +1221,12 @@ class Theme extends Content{
         $this->_layout = $template['layout'] ?? array();
         
         if(is_admin() ){
-            $this->createcustomizer( $template['customizer']  ?? array() );
+            $this->_customizer = Customizer::read( $template['customizer']  ?? array() );
         }
         
         return $this;
     }
-    /**
-     * @param array $content
-     */
-    private function createcustomizer( array $content = array()) {
-        if( count($content)){
-            $customizer = new Customizer($this->templatepath());
-            $settings = $content['settings'] ?? array();
-            $sections = $content['sections'] ?? array();
-            $controls = $content['controls'] ?? array();
-            foreach($settings as $setting  ){
-                $customizer->addsetting( Setting::read($setting));
-            }
-            foreach($sections as $section){
-                $customizer->addsection(Section::read($section));
-            }
-            foreach($controls as $control ){
-                $customizer->addcontrol( Control::read($control ) );
-            }
-            $this->_customizer = $customizer->setup();
-        }
-    }
-    /**
-     * @return \CODERS\Themes\Customizer
-     */
-    public function customizer() {
-        return $this->_customizer;
-    }
-    
-    
+
     /**
      * @return string Título
      */

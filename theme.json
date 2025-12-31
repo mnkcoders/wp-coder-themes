@@ -15,13 +15,21 @@
     },
     "customizer":{
         "settings": [
-            {"setting":"color","values":{"red":"Red","blue":"Blue"}}
+            {"setting":"color","values":{"red":"Red","blue":"Blue"}},
+            {"setting":"layout","values":{"a":"A","b":"B"}}
         ],
         "sections":[
-            {"section":""}
-        ],
-        "controls":[
-            {"control":""}
+            {
+                "section":"section",
+                "controls":[
+                    {
+                        "control":"control",
+                        "settings":"color",
+                        "label":"Color",
+                        "description":"Color Theme"
+                    }
+                ]
+            }
         ]
     },
     "menu": {
