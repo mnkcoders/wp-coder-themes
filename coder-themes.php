@@ -21,9 +21,11 @@ add_action( 'coder_theme', function( ){
         \CODERS\Themes\Theme::show();
     }
 });
-add_action( 'init', function( ){
+//Call to load the theme
+add_action( 'coder_theme_load' , function( ){
     \CODERS\Themes\Theme::create(get_template_directory());
 });
+
 
 
 /**
